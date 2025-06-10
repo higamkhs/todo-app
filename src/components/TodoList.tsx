@@ -1,50 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useContext } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import {
-  Box,
-  Card,
-  CardBody,
-  CardHeader,
-  Stack,
-  StackDivider,
-  Flex,
-  Text,
-  Input,
-  InputGroup,
-  InputRightElement,
-  IconButton,
-  Checkbox,
-  Badge,
-  Avatar,
-  useColorMode,
-  useTheme,
-  useColorModeValue,
-  Tooltip,
-  Skeleton,
-  Progress,
-  Image,
-  Tag,
-  TagLabel,
-  TagLeftIcon,
-  Select,
-  useToast,
-  Collapse,
-  CheckboxGroup,
-  Checkbox as CkBox,
-  Button,
-} from "@chakra-ui/react";
-import { AddIcon, DeleteIcon, EditIcon, CheckIcon, MoonIcon, SunIcon, InfoOutlineIcon, StarIcon } from "@chakra-ui/icons";
-import { AppContext } from "../app/providers/AppContextProvider";
-
-interface SubTask {
-  id: number;
-  title: string;
-  completed: boolean;
-}
 
 interface Todo {
   id: number;
@@ -52,12 +11,6 @@ interface Todo {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
-  priority?: "high" | "medium" | "low";
-  dueDate?: string;
-  description?: string;
-  pinned?: boolean;
-  color?: string;
-  subTasks?: SubTask[];
 }
 
 function formatDate(dateStr: string) {
@@ -74,23 +27,6 @@ export default function TodoList() {
   const [editingId, setEditingId] = useState<number|null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const { colorMode } = useColorMode();
-  const theme = useTheme();
-  const cardBg = useColorModeValue("white", "gray.800");
-  const cardShadow = useColorModeValue("xl", "dark-lg");
-  const inputBg = useColorModeValue("gray.100", "gray.700");
-  const badgeColor = (completed: boolean) => (completed ? "green" : "yellow");
-  const badgeText = (completed: boolean) => (completed ? "完了" : "未完了");
-  const [search, setSearch] = useState("");
-  const [showDetailId, setShowDetailId] = useState<number | null>(null);
-  const toast = useToast();
-  const appCtx = useContext(AppContext);
-  const {
-    categories, setCategories, activeCategory, setActiveCategory,
-    favoriteIds, setFavoriteIds, pinnedIds, setPinnedIds, categoryMap, setCategoryMap
-  } = appCtx;
-  const [newSubTask, setNewSubTask] = useState("");
-  const [editingSubTask, setEditingSubTask] = useState<{ todoId: number, subId: number, value: string } | null>(null);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -98,21 +34,17 @@ export default function TodoList() {
     } else if (status === 'authenticated') {
       fetchTodos();
     }
-    // eslint-disable-next-line
-  }, [status]);
+  }, [status, router]);
 
   const fetchTodos = async () => {
     setLoading(true);
     const response = await fetch('/api/todos');
     const data = await response.json();
     if (Array.isArray(data)) {
-      // 完了タスクは下に
       data.sort((a: Todo, b: Todo) => Number(a.completed) - Number(b.completed));
       setTodos(data);
     } else {
       setTodos([]);
-      // 必要ならエラーメッセージも表示
-      // setError(data.error || "タスクの取得に失敗しました");
     }
     setLoading(false);
   };
@@ -156,11 +88,11 @@ export default function TodoList() {
     fetchTodos();
   };
 
-  // タスク編集
   const startEdit = (id: number, title: string) => {
     setEditingId(id);
     setEditingTitle(title);
   };
+
   const saveEdit = async (id: number) => {
     if (editingTitle.trim()) {
       setLoading(true);
@@ -177,7 +109,6 @@ export default function TodoList() {
     }
   };
 
-  // ドラッグ＆ドロップ
   const onDragEnd = (result: DropResult) => {
     if (!result.destination) return;
     const items = Array.from(todos);
@@ -188,357 +119,156 @@ export default function TodoList() {
 
   const activeCount = todos.filter(t => !t.completed).length;
 
-  // 仮データ: 優先度・期日・説明・サブタスク・ピン・色
-  // 本来はAPIで管理
-  const enrichTodo = (todo: Todo, idx: number): Todo => ({
-    ...todo,
-    priority: ["high", "medium", "low"][idx % 3] as "high" | "medium" | "low",
-    dueDate: new Date(Date.now() + (idx % 5) * 86400000).toISOString(),
-    description: `これは「${todo.title}」の詳細説明です。` + (idx % 2 === 0 ? "\nサブタスクもあります。" : ""),
-    pinned: idx % 4 === 0,
-    color: ["purple.400", "blue.400", "green.400", "orange.400"][idx % 4],
-    subTasks: idx % 2 === 0 ? [
-      { id: 1, title: "サブタスクA", completed: idx % 3 === 0 },
-      { id: 2, title: "サブタスクB", completed: false },
-    ] : [],
-  });
-  const enrichedTodos = todos.map(enrichTodo)
-    .filter(todo => todo.title.includes(search));
-  const pinnedTodos = enrichedTodos.filter(t => t.pinned);
-  const normalTodos = enrichedTodos.filter(t => !t.pinned);
-  const allSubTasks = enrichedTodos.flatMap(t => t.subTasks || []);
-  const subTaskTotal = allSubTasks.length;
-  const subTaskDone = allSubTasks.filter(st => st.completed).length;
-  const progress = enrichedTodos.length ? Math.round((enrichedTodos.filter(t => t.completed).length / enrichedTodos.length) * 100) : 0;
-
-  // enrichedTodosのカテゴリ・ピン・お気に入り・フィルタ連動
-  const filteredTodos = enrichedTodos.filter(t =>
-    (activeCategory === "すべて" || categoryMap[t.id] === activeCategory)
-  );
-  const pinnedTodosFiltered = filteredTodos.filter(t => pinnedIds.includes(t.id));
-  const normalTodosFiltered = filteredTodos.filter(t => !pinnedIds.includes(t.id));
-
-  // タスクのピン止め
-  const togglePin = (id: number) => {
-    setPinnedIds((prev: number[]) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-  // タスクのお気に入り
-  const toggleFavorite = (id: number) => {
-    setFavoriteIds((prev: number[]) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  };
-  // タスクのカテゴリ変更
-  const changeCategory = (id: number, cat: string) => {
-    setCategoryMap((prev: any) => ({ ...prev, [id]: cat }));
-  };
-  // サブタスク追加
-  const addSubTask = (todo: Todo) => {
-    if (!newSubTask.trim()) return;
-    todo.subTasks = todo.subTasks || [];
-    todo.subTasks.push({ id: Date.now(), title: newSubTask, completed: false });
-    setNewSubTask("");
-  };
-  // サブタスク編集
-  const startEditSubTask = (todoId: number, subId: number, value: string) => {
-    setEditingSubTask({ todoId, subId, value });
-  };
-  const saveEditSubTask = (todo: Todo, subId: number) => {
-    if (!editingSubTask?.value.trim()) return;
-    todo.subTasks = (todo.subTasks || []).map(st => st.id === subId ? { ...st, title: editingSubTask.value } : st);
-    setEditingSubTask(null);
-  };
-  // サブタスク削除
-  const deleteSubTask = (todo: Todo, subId: number) => {
-    todo.subTasks = (todo.subTasks || []).filter(st => st.id !== subId);
-    setEditingSubTask(null);
-  };
-
   if (status === 'loading') {
-    return <div className="text-center py-20 text-lg text-gray-500 dark:text-gray-300">認証確認中...</div>;
+    return (
+      <div className="flex-1 p-8 flex items-center justify-center">
+        <div className="text-lg text-gray-600">読み込み中...</div>
+      </div>
+    );
   }
 
   return (
-    <Box minH="100vh" py={6} px={8} bgGradient="linear(to-br, #2a133e 0%, #6b21a8 60%, #312e81 100%)" _dark={{ bgGradient: "linear(to-br, #1a1027 0%, #4c1d95 60%, #18181b 100%)" }} transition="all 0.5s">
-      <Card width="100%" maxWidth="none" p={8} borderRadius="3xl" boxShadow="2xl" bg={useColorModeValue('whiteAlpha.700', 'whiteAlpha.100')} backdropFilter="blur(12px)" _dark={{ bg: 'whiteAlpha.100' }}>
-        <CardHeader pb={4}>
-          <Flex align="center" justify="flex-start" gap={4}>
-            <Avatar bg="purple.700" icon={<MoonIcon fontSize="2xl" color="white" />} size="lg" boxShadow="lg" />
-            <Text fontSize="3xl" fontWeight="extrabold" color="purple.400" letterSpacing="-0.03em" fontFamily="heading" textShadow="0 2px 8px #0002">
-              Todoリスト
-            </Text>
-          </Flex>
-        </CardHeader>
-        <CardBody>
-          <Stack spacing={6} width="100%">
-            {/* 検索バー・進捗バー */}
-            <Flex gap={2} align="center" width="100%">
-              <Input
-                placeholder="タスク検索..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                bg={useColorModeValue('whiteAlpha.800', 'whiteAlpha.200')}
-                borderRadius="xl"
-                fontWeight={500}
-                fontSize="md"
-                shadow="md"
-                color={useColorModeValue('gray.900', 'white')}
-                backdropFilter="blur(6px)"
-                width="40%"
-                minWidth="200px"
-                maxWidth="400px"
-              />
-              <Progress value={progress} size="sm" colorScheme="purple" borderRadius="xl" flex={1} ml={2} />
-              <Tooltip label={`全体進捗: ${progress}%`} hasArrow>
-                <InfoOutlineIcon color="purple.400" ml={2} />
-              </Tooltip>
-            </Flex>
-            <InputGroup size="lg">
-              <Input
-                ref={inputRef}
-                type="text"
-                value={newTodo}
-                onChange={(e) => setNewTodo(e.target.value)}
-                bg={useColorModeValue('whiteAlpha.800', 'whiteAlpha.200')}
-                fontWeight={500}
-                fontSize="lg"
-                placeholder="新しいタスクを入力"
-                onKeyDown={e => { if (e.key === 'Enter') addTodo(); }}
-                disabled={loading}
-                aria-label="新しいタスクを入力"
-                autoFocus
-                borderRadius="2xl"
-                shadow="md"
-                color={useColorModeValue('gray.900', 'white')}
-                backdropFilter="blur(6px)"
-              />
-              <InputRightElement width="4.5rem">
-                <Tooltip label="追加" hasArrow>
-                  <IconButton
-                    colorScheme="purple"
-                    aria-label="追加"
-                    icon={<AddIcon />}
-                    onClick={() => {
-                      addTodo();
-                      toast({ title: "タスク追加", description: "新しいタスクを追加しました", status: "success", duration: 2000, isClosable: true });
-                    }}
-                    isLoading={loading}
-                    borderRadius="xl"
-                    boxShadow="md"
-                  />
-                </Tooltip>
-              </InputRightElement>
-            </InputGroup>
-            <Flex justify="space-between" align="center">
-              <Text fontSize="sm" color={useColorModeValue('gray.200', 'gray.300')}>
-                アクティブ: <Text as="span" fontWeight="bold" color="purple.200">{activeCount}</Text> / 全{todos.length}
-              </Text>
-              <Text fontSize="xs" color={useColorModeValue('gray.300', 'gray.400')}>ドラッグで並び替え・ダブルクリックで編集</Text>
-            </Flex>
-            {loading && <Progress size="xs" isIndeterminate colorScheme="purple" borderRadius="xl" />}
-            {enrichedTodos.length === 0 && !loading && (
-              <Box textAlign="center" color={useColorModeValue('gray.300', 'gray.500')} py={12} fontSize="lg" fontWeight="medium">
-                タスクがありません。新しいタスクを追加しましょう！
-              </Box>
-            )}
-            {/* ピン留めタスク */}
-            {pinnedTodosFiltered.length > 0 && (
-              <Box mb={2}>
-                <Text fontSize="sm" color="purple.300" fontWeight="bold" mb={1}>ピン留め</Text>
-                <Stack spacing={3}>
-                  {pinnedTodosFiltered.map((todo, idx) => (
-                    <Card key={todo.id} p={3} borderRadius="xl" boxShadow="lg" bg={todo.color} opacity={todo.completed ? 0.5 : 1}>
-                      <Flex align="center" gap={2}>
-                        <IconButton aria-label="ピン" icon={<StarIcon />} colorScheme={pinnedIds.includes(todo.id) ? "yellow" : "gray"} variant="ghost" onClick={() => togglePin(todo.id)} />
-                        <IconButton aria-label="お気に入り" icon={<CheckIcon />} colorScheme={favoriteIds.includes(todo.id) ? "pink" : "gray"} variant="ghost" onClick={() => toggleFavorite(todo.id)} />
-                        <Text fontWeight="bold" color="white" flex={1}>{todo.title}</Text>
-                        <Badge colorScheme="purple">{badgeText(todo.completed)}</Badge>
-                        <Select size="sm" w="auto" value={categoryMap[todo.id] || "すべて"} onChange={e => changeCategory(todo.id, e.target.value)} bg="purple.100" color="purple.900" borderRadius="md" ml={2}>
-                          {categories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
-                        </Select>
-                        <Tooltip label="詳細" hasArrow>
-                          <IconButton aria-label="詳細" icon={<InfoOutlineIcon />} size="sm" onClick={() => setShowDetailId(todo.id === showDetailId ? null : todo.id)} />
-                        </Tooltip>
-                      </Flex>
-                      <Collapse in={showDetailId === todo.id} animateOpacity>
-                        <Box mt={2} p={2} bg="whiteAlpha.800" borderRadius="md" color="gray.800">
-                          <Text fontSize="sm" fontWeight="bold">説明: {todo.description}</Text>
-                          <Text fontSize="sm">期日: {todo.dueDate ? formatDate(todo.dueDate) : "未設定"}</Text>
-                          <Tag colorScheme={todo.priority === "high" ? "red" : todo.priority === "medium" ? "yellow" : "blue"} mr={2}>
-                            <TagLabel>{todo.priority === "high" ? "高" : todo.priority === "medium" ? "中" : "低"}優先度</TagLabel>
-                          </Tag>
-                          {/* サブタスク編集 */}
-                          <Box mt={2}>
-                            <Text fontSize="xs" color="gray.600">サブタスク</Text>
-                            <Stack direction="row" align="center" mb={2}>
-                              <Input size="sm" placeholder="サブタスク追加" value={newSubTask} onChange={e => setNewSubTask(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSubTask(todo); }} />
-                              <Button size="sm" colorScheme="purple" onClick={() => addSubTask(todo)}>追加</Button>
-                            </Stack>
-                            <CheckboxGroup colorScheme="purple" defaultValue={todo.subTasks?.filter(st => st.completed).map(st => st.id.toString())}>
-                              <Stack>
-                                {todo.subTasks?.map(st => (
-                                  <Flex key={st.id} align="center" gap={2}>
-                                    {editingSubTask && editingSubTask.todoId === todo.id && editingSubTask.subId === st.id ? (
-                                      <Input size="sm" value={editingSubTask.value} onChange={e => setEditingSubTask({ ...editingSubTask, value: e.target.value })} onBlur={() => saveEditSubTask(todo, st.id)} onKeyDown={e => { if (e.key === 'Enter') saveEditSubTask(todo, st.id); if (e.key === 'Escape') setEditingSubTask(null); }} autoFocus />
-                                    ) : (
-                                      <Text fontSize="sm" flex={1} onDoubleClick={() => startEditSubTask(todo.id, st.id, st.title)}>{st.title}</Text>
-                                    )}
-                                    <IconButton aria-label="編集" icon={<EditIcon />} size="xs" variant="ghost" onClick={() => startEditSubTask(todo.id, st.id, st.title)} />
-                                    <IconButton aria-label="削除" icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" onClick={() => deleteSubTask(todo, st.id)} />
-                                  </Flex>
-                                ))}
-                              </Stack>
-                            </CheckboxGroup>
-                          </Box>
-                        </Box>
-                      </Collapse>
-                    </Card>
-                  ))}
-                </Stack>
-              </Box>
-            )}
-            {/* 通常タスク */}
-            <DragDropContext onDragEnd={onDragEnd}>
-              <Droppable droppableId="todo-list">
-                {(provided) => (
-                  <Stack
-                    spacing={5}
-                    divider={<StackDivider borderColor={useColorModeValue("purple.100", "purple.900")} />}
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                  >
-                    {normalTodosFiltered.map((todo, idx) => (
-                      <Draggable key={todo.id} draggableId={todo.id.toString()} index={idx}>
-                        {(provided, snapshot) => (
-                          <Card
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            p={4}
-                            borderRadius="2xl"
-                            boxShadow={snapshot.isDragging ? "2xl" : "xl"}
-                            bg={useColorModeValue('whiteAlpha.800', 'whiteAlpha.100')}
-                            opacity={todo.completed ? 0.6 : 1}
-                            transform={snapshot.isDragging ? "scale(1.03)" : undefined}
-                            transition="all 0.2s"
-                            backdropFilter="blur(8px)"
-                          >
-                            <Flex align="center" gap={4}>
-                              <Checkbox
-                                isChecked={todo.completed}
-                                onChange={() => toggleTodo(todo.id)}
-                                colorScheme="purple"
-                                size="lg"
-                                mr={2}
-                                aria-label="完了にする"
-                                isDisabled={loading}
+    <div className="flex-1 p-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
+          Todo List
+        </h1>
+
+        {/* Add new todo */}
+        <div className="mb-8 flex gap-4">
+          <input
+            ref={inputRef}
+            type="text"
+            value={newTodo}
+            onChange={(e) => setNewTodo(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addTodo()}
+            placeholder="新しいタスクを追加..."
+            className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            disabled={loading}
+          />
+          <button
+            onClick={addTodo}
+            disabled={loading || !newTodo.trim()}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {loading ? '追加中...' : '追加'}
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            残り: {activeCount}件 / 全体: {todos.length}件
+          </div>
+        </div>
+
+        {/* Todo list */}
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="todos">
+            {(provided) => (
+              <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                {todos.map((todo, index) => (
+                  <Draggable key={todo.id} draggableId={todo.id.toString()} index={index}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        className={`p-4 bg-white dark:bg-gray-800 rounded-lg shadow border-l-4 transition-all ${
+                          todo.completed 
+                            ? 'border-green-500 opacity-75' 
+                            : 'border-purple-500'
+                        } ${
+                          snapshot.isDragging ? 'rotate-2 scale-105' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="checkbox"
+                            checked={todo.completed}
+                            onChange={() => toggleTodo(todo.id)}
+                            disabled={loading}
+                            className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                          />
+                          
+                          {editingId === todo.id ? (
+                            <div className="flex-1 flex gap-2">
+                              <input
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveEdit(todo.id);
+                                  if (e.key === 'Escape') setEditingId(null);
+                                }}
+                                className="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                                autoFocus
                               />
-                              <IconButton aria-label="ピン" icon={<StarIcon />} colorScheme={pinnedIds.includes(todo.id) ? "yellow" : "gray"} variant="ghost" onClick={() => togglePin(todo.id)} />
-                              <IconButton aria-label="お気に入り" icon={<CheckIcon />} colorScheme={favoriteIds.includes(todo.id) ? "pink" : "gray"} variant="ghost" onClick={() => toggleFavorite(todo.id)} />
-                              {editingId === todo.id ? (
-                                <Input
-                                  value={editingTitle}
-                                  onChange={e => setEditingTitle(e.target.value)}
-                                  onBlur={() => saveEdit(todo.id)}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveEdit(todo.id); if (e.key === 'Escape') { setEditingId(null); setEditingTitle(''); }}}
-                                  fontSize="lg"
-                                  fontWeight="semibold"
-                                  bg={useColorModeValue('whiteAlpha.700', 'whiteAlpha.200')}
-                                  borderRadius="md"
-                                  autoFocus
-                                  color={useColorModeValue('gray.900', 'white')}
-                                  backdropFilter="blur(4px)"
-                                />
-                              ) : (
-                                <Text
-                                  fontSize="lg"
-                                  fontWeight="semibold"
-                                  color={todo.completed ? "gray.400" : useColorModeValue('gray.800', 'white')}
-                                  textDecoration={todo.completed ? "line-through" : undefined}
-                                  cursor="pointer"
-                                  onDoubleClick={() => startEdit(todo.id, todo.title)}
-                                  noOfLines={1}
-                                  flex={1}
-                                  textShadow="0 1px 4px #0002"
+                              <button
+                                onClick={() => saveEdit(todo.id)}
+                                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                              >
+                                保存
+                              </button>
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors"
+                              >
+                                キャンセル
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <div 
+                                className={`flex-1 ${todo.completed ? 'line-through text-gray-500' : 'text-gray-900 dark:text-white'}`}
+                                onDoubleClick={() => startEdit(todo.id, todo.title)}
+                              >
+                                {todo.title}
+                              </div>
+                              
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => startEdit(todo.id, todo.title)}
+                                  className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900 rounded transition-colors"
+                                  title="編集"
                                 >
-                                  {todo.title}
-                                </Text>
-                              )}
-                              <Tag colorScheme={todo.priority === "high" ? "red" : todo.priority === "medium" ? "yellow" : "blue"} mr={2}>
-                                <TagLabel>{todo.priority === "high" ? "高" : todo.priority === "medium" ? "中" : "低"}</TagLabel>
-                              </Tag>
-                              <Badge colorScheme={todo.completed ? "purple" : "gray"} fontSize="0.9em" px={3} py={1} borderRadius="md" boxShadow="md">
-                                {badgeText(todo.completed)}
-                              </Badge>
-                              <Text fontSize="xs" color={useColorModeValue('gray.400', 'gray.500')} fontFamily="mono" pl={2} whiteSpace="nowrap">
-                                {todo.dueDate ? formatDate(todo.dueDate) : "期日なし"}
-                              </Text>
-                              <Select size="sm" w="auto" value={categoryMap[todo.id] || "すべて"} onChange={e => changeCategory(todo.id, e.target.value)} bg="purple.100" color="purple.900" borderRadius="md" ml={2}>
-                                {categories.map((cat: string) => <option key={cat} value={cat}>{cat}</option>)}
-                              </Select>
-                              <Tooltip label="詳細" hasArrow>
-                                <IconButton aria-label="詳細" icon={<InfoOutlineIcon />} size="sm" onClick={() => setShowDetailId(todo.id === showDetailId ? null : todo.id)} />
-                              </Tooltip>
-                              <Tooltip label="削除" hasArrow>
-                                <IconButton
-                                  aria-label="削除"
-                                  icon={<DeleteIcon />}
-                                  colorScheme="purple"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    deleteTodo(todo.id);
-                                    toast({ title: "タスク削除", description: "タスクを削除しました", status: "info", duration: 2000, isClosable: true });
-                                  }}
-                                  isDisabled={loading}
-                                  borderRadius="full"
-                                  ml={2}
-                                  boxShadow="md"
-                                />
-                              </Tooltip>
-                            </Flex>
-                            {/* 詳細パネル */}
-                            <Collapse in={showDetailId === todo.id} animateOpacity>
-                              <Box mt={2} p={2} bg="whiteAlpha.800" borderRadius="md" color="gray.800">
-                                <Text fontSize="sm" fontWeight="bold">説明: {todo.description}</Text>
-                                <Text fontSize="sm">期日: {todo.dueDate ? formatDate(todo.dueDate) : "未設定"}</Text>
-                                <Tag colorScheme={todo.priority === "high" ? "red" : todo.priority === "medium" ? "yellow" : "blue"} mr={2}>
-                                  <TagLabel>{todo.priority === "high" ? "高" : todo.priority === "medium" ? "中" : "低"}優先度</TagLabel>
-                                </Tag>
-                                {/* サブタスク編集 */}
-                                <Box mt={2}>
-                                  <Text fontSize="xs" color="gray.600">サブタスク</Text>
-                                  <Stack direction="row" align="center" mb={2}>
-                                    <Input size="sm" placeholder="サブタスク追加" value={newSubTask} onChange={e => setNewSubTask(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSubTask(todo); }} />
-                                    <Button size="sm" colorScheme="purple" onClick={() => addSubTask(todo)}>追加</Button>
-                                  </Stack>
-                                  <CheckboxGroup colorScheme="purple" defaultValue={todo.subTasks?.filter(st => st.completed).map(st => st.id.toString())}>
-                                    <Stack>
-                                      {todo.subTasks?.map(st => (
-                                        <Flex key={st.id} align="center" gap={2}>
-                                          {editingSubTask && editingSubTask.todoId === todo.id && editingSubTask.subId === st.id ? (
-                                            <Input size="sm" value={editingSubTask.value} onChange={e => setEditingSubTask({ ...editingSubTask, value: e.target.value })} onBlur={() => saveEditSubTask(todo, st.id)} onKeyDown={e => { if (e.key === 'Enter') saveEditSubTask(todo, st.id); if (e.key === 'Escape') setEditingSubTask(null); }} autoFocus />
-                                          ) : (
-                                            <Text fontSize="sm" flex={1} onDoubleClick={() => startEditSubTask(todo.id, st.id, st.title)}>{st.title}</Text>
-                                          )}
-                                          <IconButton aria-label="編集" icon={<EditIcon />} size="xs" variant="ghost" onClick={() => startEditSubTask(todo.id, st.id, st.title)} />
-                                          <IconButton aria-label="削除" icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" onClick={() => deleteSubTask(todo, st.id)} />
-                                        </Flex>
-                                      ))}
-                                    </Stack>
-                                  </CheckboxGroup>
-                                </Box>
-                              </Box>
-                            </Collapse>
-                          </Card>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </Stack>
-                )}
-              </Droppable>
-            </DragDropContext>
-          </Stack>
-        </CardBody>
-      </Card>
-    </Box>
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => deleteTodo(todo.id)}
+                                  disabled={loading}
+                                  className="p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900 rounded transition-colors"
+                                  title="削除"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        
+                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                          作成: {formatDate(todo.createdAt)}
+                          {todo.updatedAt !== todo.createdAt && (
+                            <> | 更新: {formatDate(todo.updatedAt)}</>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
+
+        {todos.length === 0 && !loading && (
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            タスクがありません。新しいタスクを追加してください。
+          </div>
+        )}
+      </div>
+    </div>
   );
 } 
