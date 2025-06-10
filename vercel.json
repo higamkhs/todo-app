@@ -1,4 +1,5 @@
 {
   "name": "higamkhs-todo-app-2025",
-  "version": 2
+  "version": 2,
+  "buildCommand": "prisma generate && next build"
 } 
