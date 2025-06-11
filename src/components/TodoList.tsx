@@ -149,7 +149,7 @@ export default function TodoList() {
           <button
             onClick={addTodo}
             disabled={loading || !newTodo.trim()}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? '追加中...' : '追加'}
           </button>
@@ -177,7 +177,7 @@ export default function TodoList() {
                         className={`p-4 bg-white dark:bg-gray-800 rounded-lg shadow border-l-4 transition-all ${
                           todo.completed 
                             ? 'border-green-500 opacity-75' 
-                            : 'border-purple-500'
+                            : 'border-blue-500'
                         } ${
                           snapshot.isDragging ? 'rotate-2 scale-105' : ''
                         }`}
